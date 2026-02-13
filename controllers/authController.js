@@ -32,20 +32,14 @@ exports.register = async (req, res) => {
                 html: `
                 <div style="background-color: #f4f7f9; padding: 40px; font-family: Arial, sans-serif;">
                     <div style="max-width: 450px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 20px; text-align: center; border: 1px solid #e1e4e8;">
-                        <img src="cid:logo" alt="SHOT" style="width: 140px; margin-bottom: 30px;">
+                        <h1 style="color: #16bcc2; margin-bottom: 20px;">SHOT</h1>
                         <p style="font-size: 16px; color: #4f5660;">Bonjour <strong>${username}</strong>,</p>
-                        <p style="font-size: 15px; color: #4f5660; line-height: 24px;">Merci de nous avoir rejoint. Voici votre code pour activer votre compte et commencer l'aventure SHOT :</p>
-                        <div style="background-color: #16bcc2; color: #ffffff; padding: 20px 40px; border-radius: 12px; font-size: 40px; font-weight: bold; letter-spacing: 10px; display: inline-block; margin: 20px 0;">
+                        <p style="font-size: 15px; color: #4f5660; line-height: 24px;">Voici votre code d'activation :</p>
+                        <div style="background-color: #16bcc2; color: #ffffff; padding: 20px 40px; border-radius: 12px; font-size: 40px; font-weight: bold; display: inline-block; margin: 20px 0;">
                             ${otp}
                         </div>
-                        <p style="font-size: 13px; color: #747f8d;">Ce code est valable pendant 10 minutes. À très bientôt !</p>
                     </div>
-                </div>`,
-                attachments: [{
-                    filename: 'logo_SHOT.png',
-                    path: 'C:/Users/mariem/Desktop/shot/logo_SHOT.png',
-                    cid: 'logo' 
-                }]
+                </div>`
             });
             res.status(201).json({ message: "Utilisateur créé ! Code OTP envoyé. 📧" });
         } catch (mailErr) {
@@ -62,9 +56,6 @@ exports.forgotPassword = async (req, res) => {
         const { email } = req.body;
         const user = await User.findOne({ email });
         if (!user) return res.status(404).json({ message: "Aucun compte trouvé." });
-        if (!user.isVerified) {
-            return res.status(401).json({ message: "Ce compte n'est pas encore activé. Vérifie d'abord tes mails." });
-        }
 
         const resetCode = Math.floor(1000 + Math.random() * 9000).toString();
         user.otpCode = resetCode;
@@ -78,28 +69,21 @@ exports.forgotPassword = async (req, res) => {
             html: `
             <div style="background-color: #f4f7f9; padding: 40px; font-family: Arial, sans-serif;">
                 <div style="max-width: 450px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 20px; text-align: center; border: 1px solid #e1e4e8;">
-                    <img src="cid:logo" alt="SHOT" style="width: 140px; margin-bottom: 30px;">
-                    <p style="font-size: 16px; color: #4f5660;">Bonjour,</p>
-                    <p style="font-size: 15px; color: #4f5660; line-height: 24px;">Vous avez demandé la réinitialisation de votre mot de passe. Veuillez utiliser le code suivant pour valider le changement :</p>
-                    <div style="background-color: #16bcc2; color: #ffffff; padding: 20px 40px; border-radius: 12px; font-size: 40px; font-weight: bold; letter-spacing: 10px; display: inline-block; margin: 20px 0;">
+                    <h1 style="color: #16bcc2; margin-bottom: 20px;">SHOT</h1>
+                    <p style="font-size: 15px; color: #4f5660;">Votre code de récupération est :</p>
+                    <div style="background-color: #16bcc2; color: #ffffff; padding: 20px 40px; border-radius: 12px; font-size: 40px; font-weight: bold; display: inline-block; margin: 20px 0;">
                         ${resetCode}
                     </div>
-                    <p style="font-size: 13px; color: #747f8d;">Ce code expirera automatiquement dans 10 minutes.</p>
                 </div>
-            </div>`,
-            attachments: [{
-                filename: 'logo_SHOT.png',
-                path: 'C:/Users/mariem/Desktop/shot/logo_SHOT.png',
-                cid: 'logo'
-            }]
+            </div>`
         });
-        res.json({ message: "Code envoyé ! Vérifie ta boîte mail. 📧" });
+        res.json({ message: "Code envoyé ! 📧" });
     } catch (error) {
         res.status(500).json({ message: "Erreur lors de l'envoi." });
     }
 };
 
-// --- 3. VÉRIFICATION OTP (RESTE IDENTIQUE) ---
+// --- 3. VÉRIFICATION OTP ---
 exports.verifyOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
@@ -117,7 +101,7 @@ exports.verifyOTP = async (req, res) => {
     }
 };
 
-// --- 4. RÉINITIALISATION FINALE (RESET PASSWORD - RESTE IDENTIQUE) ---
+// --- 4. RÉINITIALISATION FINALE ---
 exports.resetPassword = async (req, res) => {
     try {
         const { email, otp, newPassword } = req.body;
@@ -136,7 +120,7 @@ exports.resetPassword = async (req, res) => {
     }
 };
 
-// --- 5. CONNEXION (LOGIN - RESTE IDENTIQUE) ---
+// --- 5. CONNEXION (LOGIN) ---
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
