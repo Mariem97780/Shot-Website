@@ -22,6 +22,8 @@ exports.register = async (req, res) => {
             username, email, password: hashedPassword,
             otpCode: otp, otpExpires: Date.now() + 10 * 60 * 1000, role: 'user' 
         });
+        
+        // On sauvegarde l'utilisateur avant d'essayer d'envoyer l'email
         await user.save();
 
         try {
@@ -43,7 +45,8 @@ exports.register = async (req, res) => {
             });
             res.status(201).json({ message: "Utilisateur créé ! Code OTP envoyé. 📧" });
         } catch (mailErr) {
-            res.status(201).json({ message: "Utilisateur créé, erreur envoi email." });
+            // Si le mail échoue, l'utilisateur est quand même dans la base, on peut voir l'OTP dans Compass
+            res.status(201).json({ message: "Utilisateur créé, erreur envoi email. Vérifiez Compass." });
         }
     } catch (error) {
         res.status(500).json({ message: "Erreur lors de l'inscription." });
@@ -58,8 +61,10 @@ exports.forgotPassword = async (req, res) => {
         if (!user) return res.status(404).json({ message: "Aucun compte trouvé." });
 
         const resetCode = Math.floor(1000 + Math.random() * 9000).toString();
+        
+        // MODIFICATION : On met à jour et on SAUVEGARDE avant d'envoyer le mail
         user.otpCode = resetCode;
-        user.otpExpires = Date.now() + 10 * 60 * 1000; 
+        user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
         await user.save();
 
         await sendEmail({
@@ -88,9 +93,12 @@ exports.verifyOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
         const user = await User.findOne({ email });
+        
+        // Comparaison stricte du code et de l'expiration
         if (!user || user.otpCode !== otp || user.otpExpires < Date.now()) {
             return res.status(400).json({ message: "Code invalide ou expiré." });
         }
+
         user.isVerified = true;
         user.otpCode = null;
         user.otpExpires = null;
@@ -101,19 +109,27 @@ exports.verifyOTP = async (req, res) => {
     }
 };
 
-// --- 4. RÉINITIALISATION FINALE ---
+// --- 4. RÉINITIALISATION FINALE (RESET PASSWORD) ---
 exports.resetPassword = async (req, res) => {
     try {
+        // Utilisation de "otp" pour correspondre au code reçu
         const { email, otp, newPassword } = req.body;
+        
         const user = await User.findOne({ email });
+
+        // Vérification manuelle plus précise pour le debug
         if (!user || user.otpCode !== otp || user.otpExpires < Date.now()) {
             return res.status(400).json({ message: "Code invalide ou expiré." });
         }
+
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(newPassword, salt);
+        
+        // Nettoyage après succès
         user.otpCode = null;
         user.otpExpires = null;
         await user.save();
+
         res.json({ message: "Mot de passe modifié avec succès ! ✅" });
     } catch (error) {
         res.status(500).json({ message: "Erreur réinitialisation." });
@@ -125,12 +141,19 @@ exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
+        
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(400).json({ message: "Email ou mot de passe incorrect." });
         }
+        
         if (!user.isVerified) return res.status(401).json({ message: "Vérifie ton compte d'abord." });
+
         const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
-        res.json({ token, user: { id: user._id, username: user.username, email: user.email }, message: "Bienvenue ! 🔑" });
+        res.json({ 
+            token, 
+            user: { id: user._id, username: user.username, email: user.email }, 
+            message: "Bienvenue ! 🔑" 
+        });
     } catch (error) {
         res.status(500).json({ message: "Erreur connexion." });
     }
