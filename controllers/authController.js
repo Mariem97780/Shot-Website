@@ -21,7 +21,7 @@ exports.register = async (req, res) => {
         
         user = new User({
             username, email, password: hashedPassword,
-            otpCode: otp, otpExpires: Date.now() + 10 * 60 * 1000
+            otpCode: otp, otpExpires: Date.now() + 5 * 60 * 1000
         });
         await user.save();
 
@@ -37,7 +37,7 @@ exports.register = async (req, res) => {
                     <div style="background-color: #16bcc2; color: white; padding: 20px; border-radius: 12px; font-size: 35px; font-weight: bold; display: inline-block; margin: 25px 0; min-width: 180px; letter-spacing: 5px;">
                         ${otp}
                     </div>
-                    <p style="color: #999; font-size: 13px;">Ce code est valable pendant 10 minutes. À très bientôt !</p>
+                    <p style="color: #999; font-size: 13px;">Ce code est valable pendant 5 minutes. À très bientôt !</p>
                 </div>
             </div>`,
             attachments: [{ filename: 'logo_SHOT.png', path: LOGO_PATH, cid: 'logo_shot' }]
@@ -58,7 +58,7 @@ exports.forgotPassword = async (req, res) => {
 
         const resetCode = Math.floor(1000 + Math.random() * 9000).toString();
         user.otpCode = resetCode;
-        user.otpExpires = Date.now() + 10 * 60 * 1000;
+        user.otpExpires = Date.now() + 5 * 60 * 1000;
         await user.save();
 
         await sendEmail({
@@ -136,5 +136,24 @@ exports.login = async (req, res) => {
         res.json({ token, user: { id: user._id, username: user.username, email: user.email }, message: "Bienvenue !" });
     } catch (error) {
         res.status(500).json({ message: "Erreur lors de la connexion." });
+    }
+};
+// --- 6. MISE À JOUR DU PROFIL (FIGMA) ---
+exports.updateProfile = async (req, res) => {
+    try {
+        const { userId, ...otherData } = req.body;
+        const updateData = { ...otherData };
+
+        // Si une image a été uploadée, on ajoute l'URL Cloudinary
+        if (req.file) {
+            updateData.profileImage = req.file.path; 
+        }
+
+        const user = await User.findByIdAndUpdate(userId, updateData, { new: true });
+
+        if (!user) return res.status(404).json({ message: "Utilisateur non trouvé." });
+        res.json({ message: "Profil mis à jour !", user });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur lors de la mise à jour." });
     }
 };

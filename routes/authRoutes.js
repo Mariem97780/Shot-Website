@@ -9,6 +9,7 @@ router.post('/verify-otp', authController.verifyOTP);
 router.post('/login', authController.login); // <-- Ajoute cette ligne
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
+router.put('/update-profile', authController.updateProfile);
 // --- ROUTES GOOGLE ---
 // 1. Lance l'authentification quand on clique sur le bouton Google
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
