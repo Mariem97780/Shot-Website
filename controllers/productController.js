@@ -1,9 +1,7 @@
 const Product = require('../models/Product');
 const ImageProduit = require('../models/ImageProduit');
 const Inventaire = require('../models/Inventaire');
-const Category = require('../models/Category');
-const Avis = require('../models/Avis'); // Ajouté car le fichier existe
-const PhotoAvis = require('../models/PhotoAvis'); // Ajouté car le fichier existe
+const APIFeatures = require('../utils/apiFeatures');
 
 // --- ACTIONS ADMIN (Création, Modification, Suppression) ---
 
@@ -15,16 +13,30 @@ exports.createProduct = async (req, res) => {
             description: req.body.description,
             price: req.body.price,
             category: req.body.category,
-            stockQuantity: req.body.stockQuantity
+            // Utilise stockQuantity ou stock pour éviter les erreurs de saisie dans Postman
+            stockQuantity: req.body.stockQuantity || req.body.stock || 0 
         });
 
-        // 2. Gérer les images Cloudinary (si elles existent)
+        // 2. Gérer les images (Fichiers Multer OU Liens JSON)
         let savedImages = [];
+
+        // Cas A : Images envoyées comme fichiers (form-data)
         if (req.files && req.files.length > 0) {
             const imagePromises = req.files.map(file => {
                 return ImageProduit.create({
                     product: product._id,
-                    url: file.path, // L'URL donnée par le middleware Cloudinary
+                    url: file.path,
+                    altText: product.name
+                });
+            });
+            savedImages = await Promise.all(imagePromises);
+        } 
+        // Cas B : Images envoyées comme liens texte (JSON)
+        else if (req.body.images && Array.isArray(req.body.images)) {
+            const imagePromises = req.body.images.map(url => {
+                return ImageProduit.create({
+                    product: product._id,
+                    url: url,
                     altText: product.name
                 });
             });
@@ -34,7 +46,7 @@ exports.createProduct = async (req, res) => {
         // 3. Créer l'entrée inventaire
         const inventory = await Inventaire.create({
             product: product._id,
-            stockActuel: req.body.stockQuantity || 0
+            stockActuel: req.body.stockQuantity || req.body.stock || 0
         });
 
         // 4. Lier les IDs (Images + Inventaire) au produit
@@ -49,12 +61,13 @@ exports.createProduct = async (req, res) => {
         });
 
     } catch (err) {
-        res.status(500).json({ 
+            console.log("DÉTAIL DE L'ERREUR :", JSON.stringify(err, null, 2));        res.status(500).json({ 
+            success: false,
             message: "Erreur lors de la création complète", 
-            error: err.message 
+            error: err.message // Évite le [object Object] dans Postman
         });
     }
-};
+}; // L'accolade qui manquait est ici !
 
 exports.updateProduct = async (req, res) => {
     try {
@@ -84,20 +97,21 @@ exports.deleteProduct = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
     try {
-        let query;
-        const reqQuery = { ...req.query };
-        const removeFields = ['sort', 'page', 'limit', 'search'];
-        removeFields.forEach(param => delete reqQuery[param]);
+        const features = new APIFeatures(
+            Product.find().populate('category images inventory'), 
+            req.query
+        )
+        .search()
+        .filter()
+        .sort();
 
-        let queryStr = JSON.stringify(reqQuery).replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
-        query = Product.find(JSON.parse(queryStr)).populate('category images inventory');
+        const products = await features.query;
 
-        if (req.query.search) {
-            query = query.find({ name: { $regex: req.query.search, $options: 'i' } });
-        }
-
-        const products = await query;
-        res.status(200).json({ success: true, count: products.length, data: products });
+        res.status(200).json({ 
+            success: true, 
+            count: products.length, 
+            data: products 
+        });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

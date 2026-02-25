@@ -51,3 +51,27 @@ exports.deleteReview = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+exports.updateReview = async (req, res) => {
+    try {
+        const { rating, comment } = req.body;
+        // On cherche l'avis et on vérifie que l'utilisateur est bien l'auteur
+        let avis = await Avis.findById(req.params.id);
+
+        if (!avis) {
+            return res.status(404).json({ success: false, message: "Avis non trouvé" });
+        }
+
+        if (avis.user.toString() !== req.user._id.toString()) {
+            return res.status(401).json({ success: false, message: "Non autorisé à modifier cet avis" });
+        }
+
+        avis = await Avis.findByIdAndUpdate(req.params.id, { rating, comment }, {
+            new: true,
+            runValidators: true
+        });
+
+        res.status(200).json({ success: true, data: avis });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
