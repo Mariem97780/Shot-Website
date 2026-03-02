@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const cartController = require('../controllers/cartController');
+// Importe spécifiquement les fonctions dont tu as besoin
+const { getCart, addToCart, removeFromCart, clearCart } = require('../controllers/cartController');
 const { protect } = require('../middlewares/auth');
 
-router.get('/', protect, cartController.getCart);
-router.post('/add', protect, cartController.addToCart);
-router.delete('/remove/:productId', protect, cartController.removeFromCart);
-
+router.get('/', protect, getCart);
+router.post('/add', protect, addToCart);
+router.delete('/remove/:productId', protect, removeFromCart);
+router.delete('/', protect, clearCart);
 module.exports = router;

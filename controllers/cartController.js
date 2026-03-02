@@ -1,8 +1,8 @@
 const Cart = require('../models/Cart');
 const CartItem = require('../models/CartItem');
 const Product = require('../models/Product');
+const Inventaire = require('../models/Inventaire');
 
-// Utilitaire pour recalculer le total du panier
 const updateCartTotals = async (cartId) => {
     const items = await CartItem.find({ cart: cartId });
     const total = items.reduce((acc, item) => acc + item.subtotal, 0);
@@ -12,12 +12,24 @@ const updateCartTotals = async (cartId) => {
 exports.addToCart = async (req, res) => {
     try {
         const { productId, quantity } = req.body;
-        const product = await Product.findById(productId);
         
-        if (!product || product.stockQuantity < quantity) {
-            return res.status(400).json({ message: "Stock insuffisant ou produit inexistant" });
+        // 1. Récupérer les deux documents
+        const product = await Product.findById(productId);
+        const inventaire = await Inventaire.findOne({ product: productId });
+
+        // 2. Vérification de sécurité
+        if (!product) {
+            return res.status(404).json({ success: false, message: "Produit inexistant" });
         }
 
+        if (!inventaire || inventaire.stockActuel < quantity) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Stock insuffisant dans l'inventaire. Dispo: ${inventaire ? inventaire.stockActuel : 0}` 
+            });
+        }
+
+        // 3. Gestion du panier (le reste de ton code...)
         let cart = await Cart.findOne({ user: req.user._id });
         if (!cart) cart = await Cart.create({ user: req.user._id });
 
@@ -25,7 +37,7 @@ exports.addToCart = async (req, res) => {
 
         if (cartItem) {
             cartItem.quantity += parseInt(quantity);
-            cartItem.subtotal = cartItem.quantity * cartItem.unitPrice;
+            cartItem.subtotal = cartItem.quantity * product.price; // Utilise product.price ici
             await cartItem.save();
         } else {
             cartItem = await CartItem.create({
@@ -44,8 +56,10 @@ exports.addToCart = async (req, res) => {
         });
 
         res.status(200).json({ success: true, data: updatedCart });
+
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("Erreur détaillée:", err);
+        res.status(500).json({ success: false, error: err.message });
     }
 };
 
@@ -69,5 +83,18 @@ exports.removeFromCart = async (req, res) => {
         res.status(200).json({ success: true, message: "Produit retiré" });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+};
+
+exports.clearCart = async (req, res) => {
+    try {
+        const cart = await Cart.findOne({ user: req.user._id });
+        if (cart) {
+            await CartItem.deleteMany({ cart: cart._id });
+            await Cart.findByIdAndDelete(cart._id);
+        }
+        res.status(200).json({ success: true, message: "Panier vidé" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 };
