@@ -2,6 +2,7 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const sendEmail = require('../utils/sendEmail');
 const jwt = require('jsonwebtoken');
+const { getCurrencyInfo } = require('../utils/currencyConverter');
 
 // Définition du chemin du logo
 const LOGO_PATH = 'C:/Users/MARIEM/Desktop/shot/logo_SHOT.png';
@@ -121,20 +122,48 @@ exports.resetPassword = async (req, res) => {
         res.status(500).json({ message: "Erreur modification." });
     }
 };
-
-// --- 5. CONNEXION ---
+// --- 5. CONNEXION AVEC CURRENCY AUTO ---
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
+
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(400).json({ message: "Email ou mot de passe incorrect." });
         }
-        if (!user.isVerified) return res.status(401).json({ message: "Veuillez vérifier votre compte." });
         
-        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
-        res.json({ token, user: { id: user._id, username: user.username, email: user.email }, message: "Bienvenue !" });
+        if (!user.isVerified) {
+            return res.status(401).json({ message: "Veuillez vérifier votre compte." });
+        }
+        
+        // Génération du Token JWT
+        const token = jwt.sign(
+            { id: user._id, role: user.role }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '24h' }
+        );
+
+        // --- NOUVEAU : Détection de la devise via IP ---
+        // On récupère l'IP réelle ou celle par défaut pour le test
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        
+        // Appel de ton utilitaire Currency
+        const currencyData = await getCurrencyInfo(ip);
+
+        res.json({ 
+            token, 
+            user: { 
+                id: user._id, 
+                username: user.username, 
+                email: user.email,
+                role: user.role
+            }, 
+            currencyData, // Contient le taux, le symbole et le code pays
+            message: "Bienvenue sur SHOT ! ✨" 
+        });
+
     } catch (error) {
+        console.error("Login Error:", error);
         res.status(500).json({ message: "Erreur lors de la connexion." });
     }
 };
@@ -197,4 +226,18 @@ exports.deleteAccount = async (req, res) => {
     } catch (error) {
         res.status(500).json({ message: "Erreur lors de la suppression du compte." });
     }
+};
+exports.login = async (req, res) => {
+    // ... ton code de login existant ...
+    
+    // Détection de l'IP (gère le cas local et proxy)
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const currencyData = await getCurrencyInfo(ip);
+
+    res.json({ 
+        token, 
+        user, 
+        currencyData, // Envoie la devise détectée au client
+        message: "Bienvenue !" 
+    });
 };

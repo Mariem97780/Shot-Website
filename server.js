@@ -9,6 +9,7 @@ const adminRoutes = require('./routes/adminRoutes'); // À créer pour les stats
 
 dotenv.config();
 require('./config/passport'); 
+require('dotenv').config();
 
 connectDB();
 
