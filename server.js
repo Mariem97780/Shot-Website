@@ -4,6 +4,8 @@ const connectDB = require('./config/db');
 const session = require('express-session');
 const passport = require('passport');
 const cors = require('cors');
+const contactRoutes = require('./routes/contactRoutes');
+const adminRoutes = require('./routes/adminRoutes'); // À créer pour les stats
 
 dotenv.config();
 require('./config/passport'); 
@@ -39,6 +41,8 @@ app.use('/api/wishlist', require('./routes/wishlistRoutes'));
 app.use('/api/addresses', require('./routes/addressRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/contact', contactRoutes);
+app.use('/api/admin', adminRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

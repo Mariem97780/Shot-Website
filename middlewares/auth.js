@@ -7,17 +7,19 @@ const protect = async (req, res, next) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = await User.findById(decoded.id);
-        return next(); // Ajoute 'return' devant next()
+        return next(); 
     } catch (err) {
         return res.status(401).json({ message: "Token invalide" });
     }
 };
 
-const admin = (req, res, next) => {
+// Change 'isAdmin' en 'admin' ici pour correspondre à tes routes
+const admin = (req, res, next) => { 
     if (req.user && req.user.role === 'admin') {
-        return next(); // Ajoute 'return' devant next()
+        return next(); 
     }
     return res.status(403).json({ message: "Accès réservé aux administrateurs" });
 };
 
-module.exports = { protect, admin }; // On force l'export sous forme d'objet
+// Exporte-le sous le nom 'admin'
+module.exports = { protect, admin };
