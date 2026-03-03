@@ -5,15 +5,15 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     
-    // --- Nouveaux champs Figma (Edit Profile) ---
+    // --- Champs mis à jour pour correspondre à Figma et au Controller ---
     surname: { type: String, default: "" },
-    shippingAddress: { type: String, default: "" },
+    address: { type: String, default: "" },      // Renommé (anciennement shippingAddress)
     city: { type: String, default: "" },
     country: { type: String, default: "Tunisia" },
     zipCode: { type: String, default: "" },
-    phoneNumber: { type: String, default: "" },
+    phone: { type: String, default: "" },        // Renommé (anciennement phoneNumber)
     profileImage: { type: String, default: "" }, 
-    // --------------------------------------------
+    // ------------------------------------------------------------------
 
     isVerified: { type: Boolean, default: false },
     otpCode: { type: String },

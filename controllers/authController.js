@@ -138,22 +138,63 @@ exports.login = async (req, res) => {
         res.status(500).json({ message: "Erreur lors de la connexion." });
     }
 };
-// --- 6. MISE À JOUR DU PROFIL (FIGMA) ---
+
+// --- 6. MISE À JOUR DU PROFIL (ADAPTÉ FIGMA & MODEL) ---
 exports.updateProfile = async (req, res) => {
     try {
-        const { userId, ...otherData } = req.body;
-        const updateData = { ...otherData };
+        // Sécurité : ID extrait du middleware 'protect'
+        const userId = req.user.id; 
 
-        // Si une image a été uploadée, on ajoute l'URL Cloudinary
+        // Préparation des données (synchronisées avec User.js)
+        const updates = {
+            username: req.body.username,
+            surname: req.body.surname,
+            phone: req.body.phone,
+            address: req.body.address,
+            city: req.body.city,
+            country: req.body.country,
+            zipCode: req.body.zipCode
+        };
+
+        // Gestion de l'image (si Multer est configuré)
         if (req.file) {
-            updateData.profileImage = req.file.path; 
+            updates.profileImage = req.file.path; 
         }
 
-        const user = await User.findByIdAndUpdate(userId, updateData, { new: true });
+        // Nettoyage : on ne garde que les champs remplis
+        Object.keys(updates).forEach(key => 
+            (updates[key] === undefined || updates[key] === null || updates[key] === "") && delete updates[key]
+        );
+
+        const user = await User.findByIdAndUpdate(
+            userId, 
+            { $set: updates }, 
+            { new: true, runValidators: true }
+        ).select('-password -otpCode -otpExpires');
 
         if (!user) return res.status(404).json({ message: "Utilisateur non trouvé." });
-        res.json({ message: "Profil mis à jour !", user });
+
+        res.json({ 
+            success: true,
+            message: "Profil mis à jour avec succès !", 
+            user 
+        });
     } catch (error) {
-        res.status(500).json({ message: "Erreur lors de la mise à jour." });
+        console.error("Update Error:", error);
+        res.status(500).json({ message: "Erreur lors de la mise à jour du profil." });
+    }
+};
+// --- 7. SUPPRIMER MON COMPTE ---
+exports.deleteAccount = async (req, res) => {
+    try {
+        const userId = req.user.id; // Récupéré via le token (middleware protect)
+        await User.findByIdAndDelete(userId);
+        
+        res.json({ 
+            success: true, 
+            message: "Compte supprimé définitivement. Au revoir !" 
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur lors de la suppression du compte." });
     }
 };
