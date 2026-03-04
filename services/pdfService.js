@@ -8,7 +8,6 @@ exports.generateInvoicePDF = (order, res) => {
     doc.pipe(res);
 
     // --- LOGO ET EN-TÊTE ---
-    // Remplace par ton chemin exact (le même que dans emailService)
     const LOGO_PATH = 'C:/Users/MARIEM/Desktop/shot/logo_SHOT.png'; 
     
     try {
@@ -33,14 +32,43 @@ exports.generateInvoicePDF = (order, res) => {
     doc.moveDown(2);
     doc.fillColor('#000000').fontSize(14).text(`FACTURE N° #SH-${order._id.toString().slice(-6).toUpperCase()}`, { underline: true });
     doc.fontSize(10).text(`Date de commande : ${new Date(order.dateCommande).toLocaleDateString()}`, { underline: false });
-    
-    // --- BLOC ADRESSE ---
+
+    // --- BLOC ADRESSE CORRIGÉ ---
     doc.moveDown();
     doc.fontSize(12).fillColor('#006b54').text('Destinataire :', { bold: true });
     doc.fillColor('#000000').fontSize(10);
-    doc.text(`${order.adresseLivraison.prenom} ${order.adresseLivraison.nom}`);
-    doc.text(`${order.adresseLivraison.rue}`);
-    doc.text(`${order.adresseLivraison.ville}, Tunisie`);
+
+    // ✅ FIX PRINCIPAL : on cherche surname ET nom sur order.user
+    let nomClient = "Client S.HOT"; // fallback par défaut
+
+    if (order.user) {
+        console.log(">>> order.user reçu dans PDF :", JSON.stringify(order.user));
+
+        const prenom = order.user.surname || "";
+        const nom    = order.user.username || order.user.nom || "";
+
+        const fullName = `${prenom} ${nom}`.trim();
+
+        if (fullName.length > 0) {
+            nomClient = fullName;
+        }
+    }
+
+    // Secours : si toujours vide, on essaie l'adresse de livraison
+    if (nomClient === "Client S.HOT" && order.adresseLivraison) {
+        const prenomAdr = order.adresseLivraison.prenom || order.adresseLivraison.surname || "";
+        const nomAdr    = order.adresseLivraison.nom || "";
+        const fullAdr   = `${prenomAdr} ${nomAdr}`.trim();
+        if (fullAdr.length > 0) nomClient = fullAdr;
+    }
+
+    doc.text(nomClient);
+
+    // Reste de l'adresse
+    if (order.adresseLivraison) {
+        doc.text(`${order.adresseLivraison.rue || "Avenue Habib Bourguiba"}`);
+        doc.text(`${order.adresseLivraison.ville || "Tunis"}, Tunisie`);
+    }
 
     // --- TABLEAU DES PRODUITS ---
     doc.moveDown(2);

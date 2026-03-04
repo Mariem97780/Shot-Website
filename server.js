@@ -17,6 +17,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // <-- AJOUTE CETTE LIGNE
+app.use('/api/contacts', contactRoutes); // Pour le POST /submit
+app.use('/api/admin', adminRoutes);     // Pour le GET /stats
 
 // CONFIGURATION DES SESSIONS
 app.use(session({

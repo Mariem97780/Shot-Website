@@ -6,11 +6,11 @@ const Address = require('../models/Address');
 const CartItem = require('../models/CartItem');
 const Inventaire = require('../models/Inventaire');
 const Coupon = require('../models/Coupon'); 
-const User = require('../models/User'); // AJOUTÉ : Pour que l'envoi de mail marche
+const User = require('../models/User');
 const mongoose = require('mongoose');
 
 const { sendOrderConfirmation } = require('../services/emailService');
-const { generateInvoicePDF } = require('../services/pdfservice');
+const { generateInvoicePDF } = require('../services/pdfService');
 
 // 1. CRÉATION DE COMMANDE
 exports.createOrderFromCart = async (req, res) => {
@@ -38,7 +38,7 @@ exports.createOrderFromCart = async (req, res) => {
                 price: item.product.price
             });
             orderItemsIds.push(orderItem._id);
-            itemsHtml += `<li>${item.product.name} x${item.quantity}</li>`;
+            itemsHtml += `<li>${item.product.name} x${item.quantity} - ${item.product.price} DT</li>`;
         }
 
         const subTotal = cart.totalPrice;
@@ -54,35 +54,35 @@ exports.createOrderFromCart = async (req, res) => {
             total: finalTotal,
             methodePaiement: methodePaiement || 'cash',
             numeroDeSuivi: `SHOT-${Date.now()}`,
-            statut: 'pending',
-            dateCommande: new Date()
+            statut: (methodePaiement === 'card') ? 'pending' : 'cash', 
+            dateCommande: new Date(),
+            isPaid: false
         });
 
         await CartItem.deleteMany({ cart: cart._id });
         await Cart.findByIdAndUpdate(cart._id, { items: [], totalPrice: 0 });
 
+        // Envoi mail auto uniquement si CASH
         if (order.methodePaiement === 'cash') {
             try {
                 const user = await User.findById(req.user._id);
                 if (user) {
                     await sendOrderConfirmation(user.email, {
                         _id: order._id,
+                        numeroDeSuivi: order.numeroDeSuivi,
                         subTotal: order.subTotal,
                         total: order.total,
-                        tax: 0,
-                        itemsHtml: itemsHtml
+                        statut: "Confirmée (Paiement à la livraison)",
+                        itemsList: `<ul>${itemsHtml}</ul>`,
+                        address: `${address.rue}, ${address.ville}`
                     });
-                    console.log("✅ Mail envoyé avec succès");
+                    console.log("✅ Mail Cash envoyé");
                 }
-            } catch (err) { 
-                console.error("❌ Erreur Mail:", err.message); 
-            }
+            } catch (err) { console.error("❌ Erreur Mail:", err.message); }
         }
 
         res.status(201).json({ success: true, data: order });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
+    } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
 // 2. CHANGER LE STATUT (ADMIN)
@@ -112,7 +112,7 @@ exports.updateStatus = async (req, res) => {
     }
 };
 
-// 3. STATISTIQUES (SANS CONFIRMED !)
+// 3. STATISTIQUES
 exports.getOrderStats = async (req, res) => {
     try {
         const stats = await Order.aggregate([
@@ -127,8 +127,6 @@ exports.getOrderStats = async (req, res) => {
         ]);
 
         const result = stats[0] || { totalOrders: 0, delivered: 0, pending: 0, cancelled: 0 };
-        
-        // On s'assure que "confirmed" n'existe absolument pas dans la réponse
         delete result.confirmed;
 
         res.status(200).json({ success: true, data: result });
@@ -164,7 +162,7 @@ exports.cancelOrder = async (req, res) => {
     }
 };
 
-// 5. AUTRES FONCTIONS (DETAILS, LISTE, FACTURE)
+// 5. MES COMMANDES
 exports.getMyOrders = async (req, res) => {
     try {
         const orders = await Order.find({ user: req.user._id })
@@ -174,27 +172,46 @@ exports.getMyOrders = async (req, res) => {
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
+// 6. DÉTAILS COMMANDE
 exports.getOrderDetails = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id).populate('adresseLivraison').populate({ path: 'orderItems', populate: { path: 'product' } });
-        if (!order || order.user.toString() !== req.user._id.toString()) return res.status(404).json({ success: false, message: "Commande non trouvée." });
+        const order = await Order.findById(req.params.id)
+            .populate('adresseLivraison')
+            .populate({ path: 'orderItems', populate: { path: 'product' } });
+        if (!order || order.user.toString() !== req.user._id.toString())
+            return res.status(404).json({ success: false, message: "Commande non trouvée." });
         res.status(200).json({ success: true, data: order });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
+// 7. TOUTES LES COMMANDES (ADMIN)
 exports.getAllOrders = async (req, res) => {
     try {
-        const orders = await Order.find().populate('user', 'nom prenom email').sort({ dateCommande: -1 });
+        const orders = await Order.find().populate('user', 'nom surname username email').sort({ dateCommande: -1 });
         res.status(200).json({ success: true, count: orders.length, data: orders });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
+// 8. FACTURE PDF — FIX : populate 'surname' au lieu de 'prenom'
 exports.downloadInvoice = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id).populate('adresseLivraison').populate({ path: 'orderItems', populate: { path: 'product' } });
+        const order = await Order.findById(req.params.id)
+            .populate('user', 'nom surname username email') // ✅ CORRIGÉ : surname = prénom dans ta base MongoDB
+            .populate('adresseLivraison')
+            .populate({
+                path: 'orderItems',
+                populate: { path: 'product' }
+            });
+
+        console.log("DONNÉES USER RÉCUPÉRÉES :", order.user);
+
         if (!order) return res.status(404).json({ success: false, message: "Facture introuvable" });
+
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=facture-${order._id}.pdf`);
+        
         generateInvoicePDF(order, res);
-    } catch (error) { res.status(500).json({ success: false, message: error.message }); }
+    } catch (error) { 
+        res.status(500).json({ success: false, message: error.message }); 
+    }
 };

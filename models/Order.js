@@ -9,7 +9,7 @@ const orderSchema = new mongoose.Schema({
     total: { type: Number, required: true },
     statut: { 
         type: String, 
-        enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'], 
+        enum: ['pending', 'confirmed', 'delivered', 'cancelled', 'cash'], 
         default: 'pending' 
     },
     // 🛡️ AJOUTE CES DEUX CHAMPS ICI :
