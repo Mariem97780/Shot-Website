@@ -1,27 +1,28 @@
 const express = require('express');
 const router = express.Router();
 
-// On importe les deux controllers nécessaires
+// Import des controllers
 const adminCtrl = require('../controllers/adminController'); 
 const reviewCtrl = require('../controllers/reviewController'); 
+
+// Import des middlewares de sécurité
 const { protect, admin } = require('../middlewares/auth'); 
 
-// Sécurité : Seul l'admin peut accéder à ces routes
+// --- PROTECTION GLOBALE ---
+// Toutes les routes ci-dessous demandent d'être connecté ET admin
 router.use(protect);
 router.use(admin);
 
-// --- ROUTES STATS ---
+// --- ROUTES DU DASHBOARD ---
 router.get('/stats', adminCtrl.getDashboardStats); 
-
-// --- ROUTES USERS ---
 router.get('/users', adminCtrl.getAllUsers); 
 
-// --- ROUTES CONTACT ---
+// --- GESTION DES CONTACTS ---
 router.get('/messages', adminCtrl.getMessages); 
 router.put('/messages/:id', adminCtrl.updateMessageStatus); 
 
-// --- ROUTES AVIS (REVIEWS) ---
+// --- GESTION DES AVIS ---
 router.get('/reviews', adminCtrl.getAllReviews); 
-router.delete('/reviews/:id', reviewCtrl.deleteReview); // Utilise la suppression du reviewController
+router.delete('/reviews/:id', reviewCtrl.deleteReview); 
 
 module.exports = router;
