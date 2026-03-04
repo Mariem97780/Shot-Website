@@ -1,5 +1,6 @@
 const Wishlist = require('../models/Wishlist');
 const cartController = require('./cartController');
+const Cart = require('../models/Cart');
 
 exports.toggleWishlist = async (req, res) => {
     try {
@@ -22,31 +23,55 @@ exports.toggleWishlist = async (req, res) => {
 
 exports.moveToCart = async (req, res) => {
     try {
-        const { productId } = req.params;
-        const wishlist = await Wishlist.findOne({ user: req.user._id });
+        const userId = req.user.id;
+        const productId = req.params.productId;
 
+        // 1. Trouver la wishlist
+        const wishlist = await Wishlist.findOne({ user: userId });
+        
+        // On vérifie si le produit est bien dans la wishlist
         if (!wishlist || !wishlist.products.includes(productId)) {
-            return res.status(404).json({ message: "Produit non trouvé dans la wishlist" });
+            return res.status(404).json({ success: false, message: "Produit inexistant dans la wishlist" });
         }
 
-        // On initialise req.body s'il n'existe pas pour éviter l'erreur "undefined"
-        req.body = req.body || {}; 
-        req.body.productId = productId;
-        req.body.quantity = 1;
+        // 2. Trouver ou Créer le Panier (Cart)
+        let cart = await Cart.findOne({ user: userId });
 
-        // On appelle la logique d'ajout au panier
-        await cartController.addToCart(req, res);
+        if (!cart) {
+            // Si pas de panier, on en crée un avec le produit dans le tableau "items"
+            cart = new Cart({ 
+                user: userId, 
+                items: [productId], // Ton modèle utilise "items"
+                totalPrice: 0 // À calculer plus tard selon ta logique de prix
+            });
+        } else {
+            // SÉCURITÉ : On vérifie si le produit est déjà dans "items"
+            if (!cart.items) {
+                cart.items = [];
+            }
 
-        // Si l'ajout au panier a réussi (la réponse n'a pas encore été envoyée), 
-        // on retire de la wishlist
-        wishlist.products.pull(productId);
+            const itemExists = cart.items.some(id => id.toString() === productId);
+
+            if (!itemExists) {
+                cart.items.push(productId);
+            }
+        }
+        
+        await cart.save(); 
+
+        // 3. Supprimer de la wishlist SEULEMENT après le succès du panier
+        wishlist.products = wishlist.products.filter(id => id.toString() !== productId);
         await wishlist.save();
 
-    } catch (err) {
-        // On vérifie si une réponse a déjà été envoyée par addToCart pour éviter les doubles headers
-        if (!res.headersSent) {
-            res.status(500).json({ error: err.message });
-        }
+        res.json({ success: true, message: "Produit transféré au panier (items) avec succès !" });
+
+    } catch (error) {
+        console.error("Erreur MoveToCart:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: "Erreur lors du transfert", 
+            error: error.message 
+        });
     }
 };
 exports.clearWishlist = async (req, res) => {

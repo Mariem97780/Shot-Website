@@ -74,3 +74,40 @@ exports.confirmPaymentStatus = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+exports.confirmPayment = async (req, res) => {
+    try {
+        const { paymentIntentId } = req.body;
+        
+        // 1. On cherche la commande liée au paiement
+        const order = await Order.findOne({ paymentIntentId }).populate('user', 'email username');
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: "Paiement introuvable" });
+        }
+
+        // 2. On met à jour le statut de la commande
+        order.isPaid = true;
+        order.paidAt = Date.now();
+        order.status = 'Confirmed';
+        await order.save();
+
+        // 3. ENVOI DU MAIL (C'est ici que la magie opère ! ✨)
+        // On prépare les données pour ton nouveau design
+        const emailData = {
+            _id: order._id,
+            productName: "Premium Spirulina Pack", // Ou récupère le nom depuis orderItems
+            totalItems: order.orderItems.length,
+            subtotal: order.totalPrice - (order.taxPrice || 0),
+            tax: order.taxPrice || 0,
+            total: order.totalPrice,
+            currency: order.currency || 'DT'
+        };
+
+        await sendOrderConfirmation(order.user.email, emailData);
+
+        res.json({ success: true, message: "Paiement confirmé et mail envoyé !" });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

@@ -14,17 +14,28 @@ exports.register = async (req, res) => {
         if (!username || !email || !password) return res.status(400).json({ message: "Tous les champs sont obligatoires." });
 
         let user = await User.findOne({ email });
-        if (user) return res.status(400).json({ message: "Cet email est déjà utilisé." });
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
         const otp = Math.floor(1000 + Math.random() * 9000).toString();
-        
-        user = new User({
-            username, email, password: hashedPassword,
-            otpCode: otp, otpExpires: Date.now() + 5 * 60 * 1000
-        });
-        await user.save();
+
+        // LOGIQUE CORRIGÉE : Si l'utilisateur existe déjà
+        if (user) {
+            if (user.isVerified) {
+                return res.status(400).json({ message: "Cet email est déjà utilisé." });
+            } else {
+                // Compte non vérifié : on met à jour le code et on renvoie le mail
+                user.otpCode = otp;
+                user.otpExpires = Date.now() + 5 * 60 * 1000;
+                await user.save();
+            }
+        } else {
+            // Nouvel utilisateur
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(password, salt);
+            user = new User({
+                username, email, password: hashedPassword,
+                otpCode: otp, otpExpires: Date.now() + 5 * 60 * 1000
+            });
+            await user.save();
+        }
 
         await sendEmail({
             email: user.email,
@@ -33,17 +44,17 @@ exports.register = async (req, res) => {
             <div style="background-color: #f4f7f9; padding: 50px 20px; font-family: 'Segoe UI', Arial, sans-serif; text-align: center;">
                 <div style="max-width: 450px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #eef2f4;">
                     <img src="cid:logo_shot" alt="SHOT" width="120" style="margin-bottom: 30px; display: block; margin-left: auto; margin-right: auto;">
-                    <h2 style="color: #333; margin-bottom: 10px;">Bonjour ${username},</h2>
-                    <p style="color: #666; font-size: 15px; line-height: 1.6;">Merci de nous avoir rejoint ! Voici votre code pour activer votre compte et commencer l'aventure SHOT :</p>
+                    <h2 style="color: #333; margin-bottom: 10px;">Bonjour ${user.username},</h2>
+                    <p style="color: #666; font-size: 15px; line-height: 1.6;">Voici votre code pour activer votre compte :</p>
                     <div style="background-color: #16bcc2; color: white; padding: 20px; border-radius: 12px; font-size: 35px; font-weight: bold; display: inline-block; margin: 25px 0; min-width: 180px; letter-spacing: 5px;">
                         ${otp}
                     </div>
-                    <p style="color: #999; font-size: 13px;">Ce code est valable pendant 5 minutes. À très bientôt !</p>
+                    <p style="color: #e74c3c; font-size: 13px; font-weight: bold;">⚠️ Ce code expirera dans 5 minutes.</p>
                 </div>
             </div>`,
             attachments: [{ filename: 'logo_SHOT.png', path: LOGO_PATH, cid: 'logo_shot' }]
         });
-        res.status(201).json({ message: "Utilisateur créé ! Code envoyé." });
+        res.status(201).json({ message: "Utilisateur créé ou mis à jour ! Code envoyé." });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Erreur lors de l'inscription." });
@@ -66,23 +77,24 @@ exports.forgotPassword = async (req, res) => {
             email: user.email,
             subject: "Réinitialisation de votre mot de passe SHOT 🔑",
             html: `
-            <div style="background-color: #f4f7f9; padding: 50px 20px; font-family: 'Segoe UI', Arial, sans-serif; text-align: center;">
-                <div style="max-width: 450px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #eef2f4;">
-                    <img src="cid:logo_shot" alt="SHOT" width="120" style="margin-bottom: 30px; display: block; margin-left: auto; margin-right: auto;">
-                    <h2 style="color: #333; margin-bottom: 10px;">Bonjour,</h2>
-                    <p style="color: #666; font-size: 15px; line-height: 1.6;">Vous avez demandé la réinitialisation de votre mot de passe. Voici votre code de récupération :</p>
-                    <div style="background-color: #16bcc2; color: white; padding: 20px; border-radius: 12px; font-size: 35px; font-weight: bold; display: inline-block; margin: 25px 0; min-width: 180px; letter-spacing: 5px;">
-                        ${resetCode}
+            <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #68ccb6; padding: 20px; text-align: center;">
+                    <img src="cid:logo_shot" alt="S.HOT" style="width: 100px;">
+                </div>
+                <div style="padding: 30px; text-align: center;">
+                    <h2 style="color: #333;">Réinitialisation de mot de passe</h2>
+                    <p style="color: #666;">Vous avez demandé à changer votre mot de passe. Utilisez le code ci-dessous :</p>
+                    <div style="background-color: #f4f4f4; border-radius: 4px; display: inline-block; padding: 15px 30px; margin: 20px 0;">
+                        <span style="font-size: 32px; font-weight: bold; color: #080a0a; letter-spacing: 5px;">${resetCode}</span>
                     </div>
-                    <p style="color: #999; font-size: 13px;">Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.</p>
+                    <p style="color: #e74c3c; font-size: 14px; font-weight: bold;">⚠️ Ce code est valable uniquement pendant 5 minutes.</p>
                 </div>
             </div>`,
             attachments: [{ filename: 'logo_SHOT.png', path: LOGO_PATH, cid: 'logo_shot' }]
         });
         res.json({ message: "Code de réinitialisation envoyé !" });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Erreur serveur lors de l'envoi." });
+        res.status(500).json({ message: "Erreur serveur." });
     }
 };
 
@@ -122,7 +134,8 @@ exports.resetPassword = async (req, res) => {
         res.status(500).json({ message: "Erreur modification." });
     }
 };
-// --- 5. CONNEXION AVEC CURRENCY AUTO ---
+
+// --- 5. CONNEXION AVEC CURRENCY AUTO (CORRIGÉE) ---
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -131,113 +144,68 @@ exports.login = async (req, res) => {
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(400).json({ message: "Email ou mot de passe incorrect." });
         }
-        
+
         if (!user.isVerified) {
             return res.status(401).json({ message: "Veuillez vérifier votre compte." });
         }
-        
-        // Génération du Token JWT
+
+        // 1. Définition du TOKEN (Correctement placé)
         const token = jwt.sign(
             { id: user._id, role: user.role }, 
             process.env.JWT_SECRET, 
             { expiresIn: '24h' }
         );
 
-        // --- NOUVEAU : Détection de la devise via IP ---
-        // On récupère l'IP réelle ou celle par défaut pour le test
+        // 2. Détection de l'IP et Currency
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        
-        // Appel de ton utilitaire Currency
         const currencyData = await getCurrencyInfo(ip);
 
+        // 3. Envoi de la réponse unique
         res.json({ 
             token, 
-            user: { 
-                id: user._id, 
-                username: user.username, 
+            user: {
+                id: user._id,
+                username: user.username,
                 email: user.email,
                 role: user.role
             }, 
-            currencyData, // Contient le taux, le symbole et le code pays
+            currencyData, 
             message: "Bienvenue sur SHOT ! ✨" 
         });
 
     } catch (error) {
-        console.error("Login Error:", error);
+        console.error("Erreur Login:", error);
         res.status(500).json({ message: "Erreur lors de la connexion." });
     }
 };
 
-// --- 6. MISE À JOUR DU PROFIL (ADAPTÉ FIGMA & MODEL) ---
+// --- 6. MISE À JOUR DU PROFIL ---
 exports.updateProfile = async (req, res) => {
     try {
-        // Sécurité : ID extrait du middleware 'protect'
-        const userId = req.user.id; 
+        // req.user.id doit être défini par ton middleware 'protect'
+        const user = await User.findById(req.user.id); 
 
-        // Préparation des données (synchronisées avec User.js)
-        const updates = {
-            username: req.body.username,
-            surname: req.body.surname,
-            phone: req.body.phone,
-            address: req.body.address,
-            city: req.body.city,
-            country: req.body.country,
-            zipCode: req.body.zipCode
-        };
-
-        // Gestion de l'image (si Multer est configuré)
-        if (req.file) {
-            updates.profileImage = req.file.path; 
+        if (user) {
+            user.username = req.body.surname || user.username; // Note: tu envoies 'surname' dans Postman
+            user.address = req.body.address || user.address;
+            user.city = req.body.city || user.city;
+            // ... autres champs
+            const updatedUser = await user.save();
+            res.json({ message: "Profil mis à jour !", user: updatedUser });
+        } else {
+            res.status(404).json({ message: "Utilisateur non trouvé" });
         }
-
-        // Nettoyage : on ne garde que les champs remplis
-        Object.keys(updates).forEach(key => 
-            (updates[key] === undefined || updates[key] === null || updates[key] === "") && delete updates[key]
-        );
-
-        const user = await User.findByIdAndUpdate(
-            userId, 
-            { $set: updates }, 
-            { new: true, runValidators: true }
-        ).select('-password -otpCode -otpExpires');
-
-        if (!user) return res.status(404).json({ message: "Utilisateur non trouvé." });
-
-        res.json({ 
-            success: true,
-            message: "Profil mis à jour avec succès !", 
-            user 
-        });
     } catch (error) {
-        console.error("Update Error:", error);
-        res.status(500).json({ message: "Erreur lors de la mise à jour du profil." });
+        res.status(500).json({ message: "Erreur mise à jour.", error: error.message });
     }
 };
 // --- 7. SUPPRIMER MON COMPTE ---
 exports.deleteAccount = async (req, res) => {
     try {
-        const userId = req.user.id; // Récupéré via le token (middleware protect)
+        const userId = req.user.id;
         await User.findByIdAndDelete(userId);
-        
-        res.json({ 
-            success: true, 
-            message: "Compte supprimé définitivement. Au revoir !" 
-        });
+        res.json({ success: true, message: "Compte supprimé." });
     } catch (error) {
-        res.status(500).json({ message: "Erreur lors de la suppression du compte." });
+        res.status(500).json({ message: "Erreur suppression." });
     }
-};
-exports.login = async (req, res) => {
-    // ... ton code de login existant ...
-    
-    // Détection de l'IP (gère le cas local et proxy)
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const currencyData = await getCurrencyInfo(ip);
-
-    res.json({ 
-        token, 
-        user, 
-        currencyData, // Envoie la devise détectée au client
-        message: "Bienvenue !" 
-    });
 };

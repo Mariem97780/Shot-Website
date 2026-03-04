@@ -1,40 +1,87 @@
 const PDFDocument = require('pdfkit');
+const path = require('path');
 
 exports.generateInvoicePDF = (order, res) => {
     const doc = new PDFDocument({ margin: 50 });
 
-    // Envoi du PDF directement au navigateur
+    // Envoi du flux PDF au client
     doc.pipe(res);
 
-    // --- EN-TÊTE ---
-    doc.fontSize(25).text('S.HOT - FACTURE', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(10).text(`Commande N° : ${order._id}`);
-    doc.text(`Date : ${new Date(order.dateCommande).toLocaleDateString()}`);
-    doc.moveDown();
+    // --- LOGO ET EN-TÊTE ---
+    // Remplace par ton chemin exact (le même que dans emailService)
+    const LOGO_PATH = 'C:/Users/MARIEM/Desktop/shot/logo_SHOT.png'; 
+    
+    try {
+        doc.image(LOGO_PATH, 50, 45, { width: 60 });
+    } catch (err) {
+        console.log("Logo introuvable pour le PDF, continuation sans image.");
+    }
 
-    // --- ADRESSE ---
-    doc.fontSize(12).text('Adresse de livraison :', { underline: true });
-    doc.fontSize(10).text(`${order.adresseLivraison.prenom} ${order.adresseLivraison.nom}`);
-    doc.text(`${order.adresseLivraison.rue}, ${order.adresseLivraison.ville}`);
+    doc.fillColor('#006b54')
+       .fontSize(20)
+       .text('S.HOT SHOP', 120, 50, { align: 'right' });
+    
+    doc.fillColor('#444444')
+       .fontSize(10)
+       .text('Tunisie, Tunis', 120, 75, { align: 'right' });
+    doc.text('Contact: shotpremiumspirulina@gmail.com', 120, 90, { align: 'right' });
+
+    doc.moveDown(2);
+    doc.moveTo(50, 115).lineTo(550, 115).stroke('#eeeeee');
+
+    // --- INFOS FACTURE ---
+    doc.moveDown(2);
+    doc.fillColor('#000000').fontSize(14).text(`FACTURE N° #SH-${order._id.toString().slice(-6).toUpperCase()}`, { underline: true });
+    doc.fontSize(10).text(`Date de commande : ${new Date(order.dateCommande).toLocaleDateString()}`, { underline: false });
+    
+    // --- BLOC ADRESSE ---
     doc.moveDown();
+    doc.fontSize(12).fillColor('#006b54').text('Destinataire :', { bold: true });
+    doc.fillColor('#000000').fontSize(10);
+    doc.text(`${order.adresseLivraison.prenom} ${order.adresseLivraison.nom}`);
+    doc.text(`${order.adresseLivraison.rue}`);
+    doc.text(`${order.adresseLivraison.ville}, Tunisie`);
 
     // --- TABLEAU DES PRODUITS ---
-    doc.fontSize(12).text('Produits commandés :', { underline: true });
-    doc.moveDown(0.5);
+    doc.moveDown(2);
+    const tableTop = 250;
+    doc.fillColor('#006b54').fontSize(10);
+    doc.text('PRODUIT', 50, tableTop, { bold: true });
+    doc.text('QTÉ', 300, tableTop, { bold: true });
+    doc.text('PRIX UNIT.', 400, tableTop, { bold: true });
+    doc.text('TOTAL', 500, tableTop, { bold: true });
 
+    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke('#006b54');
+
+    let i = 0;
+    doc.fillColor('#000000');
     order.orderItems.forEach(item => {
-        doc.fontSize(10).text(
-            `${item.product.name} x${item.quantity} .................... ${item.price * item.quantity} DT`
-        );
+        const y = tableTop + 30 + (i * 25);
+        doc.text(item.product.name, 50, y);
+        doc.text(item.quantity.toString(), 300, y);
+        doc.text(`${item.price.toFixed(3)} DT`, 400, y);
+        doc.text(`${(item.quantity * item.price).toFixed(3)} DT`, 500, y);
+        i++;
     });
 
-    // --- RÉSUMÉ FINANCIER (Sans Taxe) ---
-    doc.moveDown();
-    doc.fontSize(12).text('-----------------------------------');
-    doc.text(`Sous-total : ${order.subTotal} DT`);
-    doc.text(`Livraison : ${order.fraisLivraison} DT`);
-    doc.fontSize(14).text(`TOTAL : ${order.total} DT`, { bold: true });
+    // --- RÉSUMÉ FINAL ---
+    const summaryTop = tableTop + 60 + (i * 25);
+    doc.moveTo(350, summaryTop).lineTo(550, summaryTop).stroke('#eeeeee');
+
+    doc.fontSize(10).text('Sous-total :', 350, summaryTop + 15);
+    doc.text(`${order.subTotal.toFixed(3)} DT`, 500, summaryTop + 15);
+
+    doc.text('Frais de livraison :', 350, summaryTop + 30);
+    doc.text(`${order.fraisLivraison.toFixed(3)} DT`, 500, summaryTop + 30);
+
+    doc.fontSize(14).fillColor('#006b54').text('TOTAL À PAYER :', 350, summaryTop + 50, { bold: true });
+    doc.text(`${order.total.toFixed(3)} DT`, 500, summaryTop + 50);
+
+    // --- PIED DE PAGE ---
+    doc.fillColor('#888888').fontSize(8).text(
+        'Merci pour votre confiance ! À bientôt sur S.HOT SHOP.',
+        50, 700, { align: 'center', width: 500 }
+    );
 
     doc.end();
 };
