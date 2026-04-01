@@ -7,6 +7,7 @@ const CartItem = require('../models/CartItem');
 const Inventaire = require('../models/Inventaire');
 const Coupon = require('../models/Coupon'); 
 const User = require('../models/User');
+const { getCurrencyInfo } = require('../utils/currencyConverter');
 const mongoose = require('mongoose');
 
 const { sendOrderConfirmation } = require('../services/emailService');
@@ -24,9 +25,10 @@ exports.createOrderFromCart = async (req, res) => {
             return res.status(400).json({ success: false, message: "Votre panier est vide." });
         }
 
-        const { addressId, methodePaiement } = req.body; 
-        const address = await Address.findById(addressId);
-        if (!address) return res.status(400).json({ success: false, message: "Adresse introuvable." });
+        const { addressId, methodePaiement, selectedCurrency } = req.body; 
+        
+        // 1. Récupérer le taux de change pour la devise choisie (ou IP par défaut)
+        const conv = await getCurrencyInfo(req.ip, selectedCurrency);
 
         const orderItemsIds = [];
         let itemsHtml = "";
@@ -38,51 +40,42 @@ exports.createOrderFromCart = async (req, res) => {
                 price: item.product.price
             });
             orderItemsIds.push(orderItem._id);
-            itemsHtml += `<li>${item.product.name} x${item.quantity} - ${item.product.price} DT</li>`;
+            itemsHtml += `<li>${item.product.name} x${item.quantity}</li>`;
         }
 
         const subTotal = cart.totalPrice;
         const shippingCost = 7;
-        const finalTotal = subTotal + shippingCost;
+        const finalTotalUSD = subTotal + shippingCost;
 
+        // 2. Calculer le montant final dans la devise choisie
+        const convertedTotal = (finalTotalUSD * conv.rate).toFixed(2);
+
+        // 3. Créer la commande avec l'historique de devise
         const order = await Order.create({
             user: req.user._id,
             orderItems: orderItemsIds,
             adresseLivraison: addressId,
             subTotal: subTotal,
             fraisLivraison: shippingCost,
-            total: finalTotal,
+            total: finalTotalUSD, // On garde la base USD pour l'admin
+            deviseCommande: {
+                code: conv.code,
+                symbole: conv.symbol,
+                tauxApplique: conv.rate,
+                montantConverti: convertedTotal
+            },
             methodePaiement: methodePaiement || 'cash',
             numeroDeSuivi: `SHOT-${Date.now()}`,
-            statut: (methodePaiement === 'card') ? 'pending' : 'cash', 
-            dateCommande: new Date(),
-            isPaid: false
+            statut: (methodePaiement === 'card') ? 'pending' : 'cash'
         });
 
         await CartItem.deleteMany({ cart: cart._id });
         await Cart.findByIdAndUpdate(cart._id, { items: [], totalPrice: 0 });
 
-        // Envoi mail auto uniquement si CASH
-        if (order.methodePaiement === 'cash') {
-            try {
-                const user = await User.findById(req.user._id);
-                if (user) {
-                    await sendOrderConfirmation(user.email, {
-                        _id: order._id,
-                        numeroDeSuivi: order.numeroDeSuivi,
-                        subTotal: order.subTotal,
-                        total: order.total,
-                        statut: "Confirmée (Paiement à la livraison)",
-                        itemsList: `<ul>${itemsHtml}</ul>`,
-                        address: `${address.rue}, ${address.ville}`
-                    });
-                    console.log("✅ Mail Cash envoyé");
-                }
-            } catch (err) { console.error("❌ Erreur Mail:", err.message); }
-        }
-
         res.status(201).json({ success: true, data: order });
-    } catch (error) { res.status(500).json({ success: false, message: error.message }); }
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 };
 
 // 2. CHANGER LE STATUT (ADMIN)
